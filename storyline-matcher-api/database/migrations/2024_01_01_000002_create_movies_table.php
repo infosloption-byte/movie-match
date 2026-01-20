@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -25,9 +26,19 @@ return new class extends Migration
 
             // Indexes for common queries
             $table->index('tmdb_id');
-            $table->index('title');
             $table->index('popularity');
         });
+
+        // Create title index with prefix for MySQL compatibility
+        // MySQL with utf8mb4 has a 1000 byte limit on index keys
+        // Using 191 characters (191 * 4 bytes = 764 bytes) to stay within limit
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('CREATE INDEX movies_title_index ON movies (title(191))');
+        } else {
+            Schema::table('movies', function (Blueprint $table) {
+                $table->index('title');
+            });
+        }
     }
 
     /**
