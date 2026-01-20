@@ -15,10 +15,13 @@ return new class extends Migration
     public function up(): void
     {
         // Only enable pgvector for PostgreSQL
-        if (DB::getDriverName() === 'pgsql') {
+        $driver = DB::getDriverName();
+
+        if ($driver === 'pgsql') {
             DB::statement('CREATE EXTENSION IF NOT EXISTS vector');
         }
         // MySQL doesn't require any setup - embeddings will be stored as JSON
+        // Skip this migration for MySQL and other databases
     }
 
     /**
