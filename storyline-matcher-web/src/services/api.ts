@@ -18,15 +18,25 @@ class ApiService {
    * Search movies by title
    */
   async searchMovies(query: string, page = 1, perPage = 20): Promise<SearchResponse> {
-    const response = await this.client.get<ApiResponse<SearchResponse>>('/movies/search', {
+    const response = await this.client.get<ApiResponse<any>>('/movies/search', {
       params: { query, page, per_page: perPage },
     });
 
-    if (!response.data.success || !response.data.data) {
+    if (!response.data.success) {
       throw new Error(response.data.message || 'Search failed');
     }
 
-    return response.data.data;
+    // The API returns { success, data: [], pagination: {} }
+    // We need to restructure it to match SearchResponse type
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: perPage,
+        total: 0,
+        last_page: 1,
+      },
+    };
   }
 
   /**
