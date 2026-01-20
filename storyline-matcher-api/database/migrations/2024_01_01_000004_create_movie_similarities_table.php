@@ -16,13 +16,17 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('movie_similarities', function (Blueprint $table) {
-            $table->foreignId('movie_id')->constrained()->onDelete('cascade');
-            $table->foreignId('similar_movie_id')->constrained('movies')->onDelete('cascade');
+            $table->unsignedBigInteger('movie_id');
+            $table->unsignedBigInteger('similar_movie_id');
             $table->decimal('similarity_score', 5, 4)->comment('Cosine similarity score (0-1)');
             $table->timestamps();
 
             // Composite primary key to prevent duplicates
             $table->primary(['movie_id', 'similar_movie_id']);
+
+            // Foreign key constraints
+            $table->foreign('movie_id')->references('id')->on('movies')->onDelete('cascade');
+            $table->foreign('similar_movie_id')->references('id')->on('movies')->onDelete('cascade');
 
             // Index for reverse lookups
             $table->index('similar_movie_id');
