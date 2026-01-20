@@ -109,34 +109,53 @@ class SeedMovies extends Command
         $errorCount = 0;
 
         foreach ($moviesWithoutEmbeddings as $movie) {
-            try {
-                // Prepare text
-                $text = $this->embeddingService->prepareText($movie->plot_summary);
+            $maxRetries = 3;
+            $retryDelay = 20; // Start with 20 seconds for rate limit
 
-                // Generate embedding
-                $embedding = $this->embeddingService->generateEmbedding($text);
+            for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                try {
+                    // Prepare text
+                    $text = $this->embeddingService->prepareText($movie->plot_summary);
 
-                // Format for database
-                $embeddingString = $this->embeddingService->formatForDatabase($embedding);
+                    // Generate embedding
+                    $embedding = $this->embeddingService->generateEmbedding($text);
 
-                // Save to database
-                MovieEmbedding::create([
-                    'movie_id' => $movie->id,
-                    'embedding' => $embeddingString,
-                ]);
+                    // Format for database
+                    $embeddingString = $this->embeddingService->formatForDatabase($embedding);
 
-                $successCount++;
-                $bar->advance();
+                    // Save to database
+                    MovieEmbedding::create([
+                        'movie_id' => $movie->id,
+                        'embedding' => $embeddingString,
+                    ]);
 
-                // Small delay to avoid OpenAI rate limits
-                usleep(500000); // 0.5 seconds
+                    $successCount++;
+                    $bar->advance();
 
-            } catch (\Exception $e) {
-                $errorCount++;
-                $bar->advance();
-                $this->newLine();
-                $this->error("Failed to generate embedding for: {$movie->title}");
-                $this->error("Error: {$e->getMessage()}");
+                    // Delay to avoid rate limits (increase for free tier)
+                    sleep(2); // 2 seconds between successful requests
+                    break; // Success, exit retry loop
+
+                } catch (\Exception $e) {
+                    $isRateLimit = str_contains($e->getMessage(), 'rate limit');
+
+                    if ($isRateLimit && $attempt < $maxRetries) {
+                        // Rate limit error - wait and retry
+                        $this->newLine();
+                        $this->warn("Rate limited for: {$movie->title}. Waiting {$retryDelay}s before retry {$attempt}/{$maxRetries}...");
+                        sleep($retryDelay);
+                        $retryDelay *= 2; // Exponential backoff
+                        continue;
+                    }
+
+                    // Final failure or non-rate-limit error
+                    $errorCount++;
+                    $bar->advance();
+                    $this->newLine();
+                    $this->error("Failed to generate embedding for: {$movie->title}");
+                    $this->error("Error: {$e->getMessage()}");
+                    break; // Exit retry loop
+                }
             }
         }
 
