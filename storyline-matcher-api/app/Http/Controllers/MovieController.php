@@ -178,7 +178,12 @@ class MovieController extends Controller
             $query = $request->input('query');
             $perPage = $request->input('per_page', 20);
 
-            $movies = Movie::where('title', 'ILIKE', "%{$query}%")
+            // Use appropriate operator based on database driver
+            // PostgreSQL: ILIKE (case-insensitive)
+            // MySQL: LIKE (case-insensitive by default with utf8mb4_general_ci)
+            $operator = DB::getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+
+            $movies = Movie::where('title', $operator, "%{$query}%")
                 ->orderBy('popularity', 'desc')
                 ->paginate($perPage);
 
