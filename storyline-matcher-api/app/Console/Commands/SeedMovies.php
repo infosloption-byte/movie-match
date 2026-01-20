@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Movie;
+use App\Models\MovieEmbedding;
 use App\Services\TMDBService;
 use App\Services\EmbeddingService;
 use Illuminate\Console\Command;
@@ -108,7 +109,21 @@ class SeedMovies extends Command
 
         foreach ($moviesWithoutEmbeddings as $movie) {
             try {
-                $this->embeddingService->generateEmbedding($movie);
+                // Prepare text
+                $text = $this->embeddingService->prepareText($movie->plot_summary);
+
+                // Generate embedding
+                $embedding = $this->embeddingService->generateEmbedding($text);
+
+                // Format for database
+                $embeddingString = $this->embeddingService->formatForDatabase($embedding);
+
+                // Save to database
+                MovieEmbedding::create([
+                    'movie_id' => $movie->id,
+                    'embedding' => $embeddingString,
+                ]);
+
                 $successCount++;
                 $bar->advance();
 

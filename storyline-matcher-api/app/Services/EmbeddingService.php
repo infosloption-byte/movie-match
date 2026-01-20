@@ -42,13 +42,14 @@ class EmbeddingService
         }
 
         try {
-            $response = Http::withHeaders([
-                'Authorization' => "Bearer {$this->apiKey}",
-                'Content-Type' => 'application/json',
-            ])->post($this->apiUrl, [
-                'input' => $text,
-                'model' => $this->model,
-            ]);
+            $response = Http::withOptions(['verify' => config('app.env') !== 'local'])
+                ->withHeaders([
+                    'Authorization' => "Bearer {$this->apiKey}",
+                    'Content-Type' => 'application/json',
+                ])->post($this->apiUrl, [
+                    'input' => $text,
+                    'model' => $this->model,
+                ]);
 
             if ($response->failed()) {
                 Log::error('OpenAI API embedding generation failed', [
@@ -102,13 +103,14 @@ class EmbeddingService
         }
 
         try {
-            $response = Http::withHeaders([
-                'Authorization' => "Bearer {$this->apiKey}",
-                'Content-Type' => 'application/json',
-            ])->timeout(60)->post($this->apiUrl, [
-                'input' => array_values($texts),
-                'model' => $this->model,
-            ]);
+            $response = Http::withOptions(['verify' => config('app.env') !== 'local'])
+                ->withHeaders([
+                    'Authorization' => "Bearer {$this->apiKey}",
+                    'Content-Type' => 'application/json',
+                ])->timeout(60)->post($this->apiUrl, [
+                    'input' => array_values($texts),
+                    'model' => $this->model,
+                ]);
 
             if ($response->failed()) {
                 Log::error('OpenAI API batch embedding generation failed', [

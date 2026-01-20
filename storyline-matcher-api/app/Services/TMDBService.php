@@ -39,23 +39,24 @@ class TMDBService
     {
         $this->waitForRateLimit();
 
-        $response = Http::get("{$this->baseUrl}/search/movie", [
-            'api_key' => $this->apiKey,
-            'query' => $query,
-            'page' => $page,
-            'language' => 'en-US',
-        ]);
+        $request = Http::withOptions(['verify' => config('app.env') !== 'local'])
+            ->get("{$this->baseUrl}/search/movie", [
+                'api_key' => $this->apiKey,
+                'query' => $query,
+                'page' => $page,
+                'language' => 'en-US',
+            ]);
 
-        if ($response->failed()) {
+        if ($request->failed()) {
             Log::error('TMDB API search failed', [
                 'query' => $query,
-                'status' => $response->status(),
-                'body' => $response->body(),
+                'status' => $request->status(),
+                'body' => $request->body(),
             ]);
             throw new \Exception('Failed to search movies from TMDB');
         }
 
-        return $response->json();
+        return $request->json();
     }
 
     /**
@@ -68,10 +69,11 @@ class TMDBService
     {
         $this->waitForRateLimit();
 
-        $response = Http::get("{$this->baseUrl}/movie/{$tmdbId}", [
-            'api_key' => $this->apiKey,
-            'language' => 'en-US',
-        ]);
+        $response = Http::withOptions(['verify' => config('app.env') !== 'local'])
+            ->get("{$this->baseUrl}/movie/{$tmdbId}", [
+                'api_key' => $this->apiKey,
+                'language' => 'en-US',
+            ]);
 
         if ($response->failed()) {
             Log::error('TMDB API get movie details failed', [
@@ -95,11 +97,12 @@ class TMDBService
     {
         $this->waitForRateLimit();
 
-        $response = Http::get("{$this->baseUrl}/movie/popular", [
-            'api_key' => $this->apiKey,
-            'page' => $page,
-            'language' => 'en-US',
-        ]);
+        $response = Http::withOptions(['verify' => config('app.env') !== 'local'])
+            ->get("{$this->baseUrl}/movie/popular", [
+                'api_key' => $this->apiKey,
+                'page' => $page,
+                'language' => 'en-US',
+            ]);
 
         if ($response->failed()) {
             Log::error('TMDB API get popular movies failed', [
@@ -131,7 +134,8 @@ class TMDBService
             'sort_by' => 'popularity.desc',
         ], $filters);
 
-        $response = Http::get("{$this->baseUrl}/discover/movie", $params);
+        $response = Http::withOptions(['verify' => config('app.env') !== 'local'])
+            ->get("{$this->baseUrl}/discover/movie", $params);
 
         if ($response->failed()) {
             Log::error('TMDB API discover movies failed', [
