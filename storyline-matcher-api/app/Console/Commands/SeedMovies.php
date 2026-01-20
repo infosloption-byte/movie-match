@@ -45,7 +45,8 @@ class SeedMovies extends Command
             $this->info("📥 Importing page {$page}/{$pages}...");
 
             try {
-                $movies = $this->tmdbService->getPopularMovies($page);
+                $response = $this->tmdbService->getPopularMovies($page);
+                $movies = $response['results'] ?? [];
 
                 foreach ($movies as $movieData) {
                     // Check if movie already exists
