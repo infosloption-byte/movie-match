@@ -52,11 +52,26 @@ class EmbeddingService
                 ]);
 
             if ($response->failed()) {
+                $errorBody = $response->body();
                 Log::error('OpenAI API embedding generation failed', [
                     'status' => $response->status(),
-                    'body' => $response->body(),
+                    'body' => $errorBody,
                 ]);
-                throw new \Exception('Failed to generate embedding from OpenAI API');
+
+                // Provide more specific error message
+                $errorMessage = 'Failed to generate embedding from OpenAI API';
+                if ($response->status() === 401) {
+                    $errorMessage = 'Invalid OpenAI API key. Please check your OPENAI_API_KEY in .env file';
+                } elseif ($response->status() === 429) {
+                    $errorMessage = 'OpenAI API rate limit exceeded. Please wait and try again';
+                } elseif (!empty($errorBody)) {
+                    $decoded = json_decode($errorBody, true);
+                    if (isset($decoded['error']['message'])) {
+                        $errorMessage = 'OpenAI API Error: ' . $decoded['error']['message'];
+                    }
+                }
+
+                throw new \Exception($errorMessage);
             }
 
             $data = $response->json();
@@ -113,12 +128,27 @@ class EmbeddingService
                 ]);
 
             if ($response->failed()) {
+                $errorBody = $response->body();
                 Log::error('OpenAI API batch embedding generation failed', [
                     'status' => $response->status(),
-                    'body' => $response->body(),
+                    'body' => $errorBody,
                     'batch_size' => count($texts),
                 ]);
-                throw new \Exception('Failed to generate batch embeddings from OpenAI API');
+
+                // Provide more specific error message
+                $errorMessage = 'Failed to generate batch embeddings from OpenAI API';
+                if ($response->status() === 401) {
+                    $errorMessage = 'Invalid OpenAI API key. Please check your OPENAI_API_KEY in .env file';
+                } elseif ($response->status() === 429) {
+                    $errorMessage = 'OpenAI API rate limit exceeded. Please wait and try again';
+                } elseif (!empty($errorBody)) {
+                    $decoded = json_decode($errorBody, true);
+                    if (isset($decoded['error']['message'])) {
+                        $errorMessage = 'OpenAI API Error: ' . $decoded['error']['message'];
+                    }
+                }
+
+                throw new \Exception($errorMessage);
             }
 
             $data = $response->json();
