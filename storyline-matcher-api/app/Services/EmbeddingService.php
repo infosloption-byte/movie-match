@@ -24,7 +24,11 @@ class EmbeddingService
     {
         $this->provider = config('services.embedding.provider', 'openai');
 
-        if ($this->provider === 'huggingface') {
+        if ($this->provider === 'local') {
+            $this->apiUrl = config('services.local_embedding.url', 'http://localhost:5001');
+            $this->apiKey = '';  // Not needed for local
+            $this->model = 'sentence-transformers/all-MiniLM-L6-v2';
+        } elseif ($this->provider === 'huggingface') {
             $this->apiKey = config('services.huggingface.api_key');
             $this->model = config('services.huggingface.model', 'sentence-transformers/all-MiniLM-L6-v2');
             $this->apiUrl = "https://api-inference.huggingface.co/models/{$this->model}";
@@ -52,7 +56,9 @@ class EmbeddingService
             throw new \Exception('Cannot generate embedding for empty text');
         }
 
-        if ($this->provider === 'huggingface') {
+        if ($this->provider === 'local') {
+            return $this->generateLocalEmbedding($text);
+        } elseif ($this->provider === 'huggingface') {
             return $this->generateHuggingFaceEmbedding($text);
         } else {
             return $this->generateOpenAIEmbedding($text);
@@ -173,6 +179,56 @@ class EmbeddingService
 
         } catch (\Exception $e) {
             Log::error('HuggingFace embedding generation exception', [
+                'message' => $e->getMessage(),
+                'text_length' => strlen($text),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Generate embedding using Local Python Service
+     */
+    private function generateLocalEmbedding(string $text): array
+    {
+        try {
+            $response = Http::timeout(30)->post("{$this->apiUrl}/embed", [
+                'text' => $text,
+            ]);
+
+            if ($response->failed()) {
+                $errorBody = $response->body();
+                Log::error('Local embedding service failed', [
+                    'status' => $response->status(),
+                    'body' => $errorBody,
+                ]);
+
+                $errorMessage = 'Failed to generate embedding from local service';
+                if ($response->status() === 0 || $response->status() >= 500) {
+                    $errorMessage = 'Local embedding service is not running. Please start it with: python app.py';
+                } elseif (!empty($errorBody)) {
+                    $decoded = json_decode($errorBody, true);
+                    if (isset($decoded['error'])) {
+                        $errorMessage = 'Local Service Error: ' . $decoded['error'];
+                    }
+                }
+
+                throw new \Exception($errorMessage);
+            }
+
+            $data = $response->json();
+
+            if (!isset($data['embedding']) || !is_array($data['embedding'])) {
+                Log::error('Local service response invalid', [
+                    'response' => $data,
+                ]);
+                throw new \Exception('Invalid response from local embedding service');
+            }
+
+            return $data['embedding'];
+
+        } catch (\Exception $e) {
+            Log::error('Local embedding generation exception', [
                 'message' => $e->getMessage(),
                 'text_length' => strlen($text),
             ]);
