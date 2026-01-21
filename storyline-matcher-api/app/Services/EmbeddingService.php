@@ -15,14 +15,25 @@ use Illuminate\Support\Facades\Log;
  */
 class EmbeddingService
 {
+    private string $provider;
     private string $apiKey;
     private string $model;
-    private string $apiUrl = 'https://api.openai.com/v1/embeddings';
+    private string $apiUrl;
 
     public function __construct()
     {
-        $this->apiKey = config('services.openai.api_key');
-        $this->model = config('services.openai.model', 'text-embedding-3-small');
+        $this->provider = config('services.embedding.provider', 'openai');
+
+        if ($this->provider === 'huggingface') {
+            $this->apiKey = config('services.huggingface.api_key');
+            $this->model = config('services.huggingface.model', 'sentence-transformers/all-MiniLM-L6-v2');
+            $this->apiUrl = "https://api-inference.huggingface.co/pipeline/feature-extraction/{$this->model}";
+        } else {
+            // Default to OpenAI
+            $this->apiKey = config('services.openai.api_key');
+            $this->model = config('services.openai.model', 'text-embedding-3-small');
+            $this->apiUrl = 'https://api.openai.com/v1/embeddings';
+        }
     }
 
     /**
@@ -41,6 +52,18 @@ class EmbeddingService
             throw new \Exception('Cannot generate embedding for empty text');
         }
 
+        if ($this->provider === 'huggingface') {
+            return $this->generateHuggingFaceEmbedding($text);
+        } else {
+            return $this->generateOpenAIEmbedding($text);
+        }
+    }
+
+    /**
+     * Generate embedding using OpenAI API
+     */
+    private function generateOpenAIEmbedding(string $text): array
+    {
         try {
             $response = Http::withOptions(['verify' => config('app.env') !== 'local'])
                 ->withHeaders([
@@ -58,7 +81,6 @@ class EmbeddingService
                     'body' => $errorBody,
                 ]);
 
-                // Provide more specific error message
                 $errorMessage = 'Failed to generate embedding from OpenAI API';
                 if ($response->status() === 401) {
                     $errorMessage = 'Invalid OpenAI API key. Please check your OPENAI_API_KEY in .env file';
@@ -86,7 +108,65 @@ class EmbeddingService
             return $data['data'][0]['embedding'];
 
         } catch (\Exception $e) {
-            Log::error('Embedding generation exception', [
+            Log::error('OpenAI embedding generation exception', [
+                'message' => $e->getMessage(),
+                'text_length' => strlen($text),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Generate embedding using HuggingFace API
+     */
+    private function generateHuggingFaceEmbedding(string $text): array
+    {
+        try {
+            $response = Http::withOptions(['verify' => config('app.env') !== 'local'])
+                ->withHeaders([
+                    'Authorization' => "Bearer {$this->apiKey}",
+                    'Content-Type' => 'application/json',
+                ])->post($this->apiUrl, [
+                    'inputs' => $text,
+                    'options' => ['wait_for_model' => true],
+                ]);
+
+            if ($response->failed()) {
+                $errorBody = $response->body();
+                Log::error('HuggingFace API embedding generation failed', [
+                    'status' => $response->status(),
+                    'body' => $errorBody,
+                ]);
+
+                $errorMessage = 'Failed to generate embedding from HuggingFace API';
+                if ($response->status() === 401) {
+                    $errorMessage = 'Invalid HuggingFace API key. Please check your HUGGINGFACE_API_KEY in .env file';
+                } elseif ($response->status() === 429 || $response->status() === 503) {
+                    $errorMessage = 'HuggingFace API rate limit or model loading. Please wait and try again';
+                } elseif (!empty($errorBody)) {
+                    $decoded = json_decode($errorBody, true);
+                    if (isset($decoded['error'])) {
+                        $errorMessage = 'HuggingFace API Error: ' . $decoded['error'];
+                    }
+                }
+
+                throw new \Exception($errorMessage);
+            }
+
+            $data = $response->json();
+
+            // HuggingFace returns the embedding directly as an array
+            if (!is_array($data) || empty($data)) {
+                Log::error('HuggingFace API response invalid', [
+                    'response' => $data,
+                ]);
+                throw new \Exception('Invalid response from HuggingFace API');
+            }
+
+            return $data;
+
+        } catch (\Exception $e) {
+            Log::error('HuggingFace embedding generation exception', [
                 'message' => $e->getMessage(),
                 'text_length' => strlen($text),
             ]);
@@ -117,6 +197,17 @@ class EmbeddingService
             return [];
         }
 
+        // HuggingFace doesn't support batch processing in the same way
+        // For simplicity, process one by one (can be optimized later)
+        if ($this->provider === 'huggingface') {
+            $embeddings = [];
+            foreach ($texts as $text) {
+                $embeddings[] = $this->generateHuggingFaceEmbedding($text);
+            }
+            return $embeddings;
+        }
+
+        // OpenAI batch processing
         try {
             $response = Http::withOptions(['verify' => config('app.env') !== 'local'])
                 ->withHeaders([
@@ -135,7 +226,6 @@ class EmbeddingService
                     'batch_size' => count($texts),
                 ]);
 
-                // Provide more specific error message
                 $errorMessage = 'Failed to generate batch embeddings from OpenAI API';
                 if ($response->status() === 401) {
                     $errorMessage = 'Invalid OpenAI API key. Please check your OPENAI_API_KEY in .env file';

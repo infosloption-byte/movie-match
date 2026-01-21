@@ -8,10 +8,19 @@ return [
         'rate_limit_per_second' => 4, // TMDB allows ~40 requests per 10 seconds
     ],
 
+    'embedding' => [
+        'provider' => env('EMBEDDING_PROVIDER', 'openai'), // 'openai' or 'huggingface'
+    ],
+
     'openai' => [
         'api_key' => env('OPENAI_API_KEY'),
         'organization' => env('OPENAI_ORGANIZATION'),
         'model' => env('OPENAI_MODEL', 'text-embedding-3-small'),
+    ],
+
+    'huggingface' => [
+        'api_key' => env('HUGGINGFACE_API_KEY'),
+        'model' => env('HUGGINGFACE_MODEL', 'sentence-transformers/all-MiniLM-L6-v2'),
     ],
 
     'similarity' => [
