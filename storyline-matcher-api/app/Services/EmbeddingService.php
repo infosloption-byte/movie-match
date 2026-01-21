@@ -27,7 +27,7 @@ class EmbeddingService
         if ($this->provider === 'huggingface') {
             $this->apiKey = config('services.huggingface.api_key');
             $this->model = config('services.huggingface.model', 'sentence-transformers/all-MiniLM-L6-v2');
-            $this->apiUrl = "https://router.huggingface.co/models/{$this->model}";
+            $this->apiUrl = "https://api-inference.huggingface.co/models/{$this->model}";
         } else {
             // Default to OpenAI
             $this->apiKey = config('services.openai.api_key');
@@ -155,7 +155,7 @@ class EmbeddingService
 
             $data = $response->json();
 
-            // HuggingFace returns the embedding directly as an array
+            // HuggingFace sentence-transformers return embeddings as nested array [[...]]
             if (!is_array($data) || empty($data)) {
                 Log::error('HuggingFace API response invalid', [
                     'response' => $data,
@@ -163,6 +163,12 @@ class EmbeddingService
                 throw new \Exception('Invalid response from HuggingFace API');
             }
 
+            // Extract the first embedding from the nested array
+            if (isset($data[0]) && is_array($data[0])) {
+                return $data[0];
+            }
+
+            // If it's already a flat array, return as is
             return $data;
 
         } catch (\Exception $e) {
