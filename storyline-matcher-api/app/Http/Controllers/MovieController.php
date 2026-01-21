@@ -221,7 +221,7 @@ class MovieController extends Controller
         $validator = Validator::make($request->all(), [
             'limit' => 'integer|min:1|max:50',
             'threshold' => 'numeric|min:0|max:1',
-            'use_cache' => 'boolean',
+            'use_cache' => 'nullable|in:true,false,1,0',
         ]);
 
         if ($validator->fails()) {
@@ -235,7 +235,7 @@ class MovieController extends Controller
             $movie = Movie::findOrFail($id);
             $limit = $request->input('limit', 10);
             $threshold = $request->input('threshold', 0.7);
-            $useCache = $request->input('use_cache', false);
+            $useCache = filter_var($request->input('use_cache', false), FILTER_VALIDATE_BOOLEAN);
 
             // Try cache first if requested
             if ($useCache) {
