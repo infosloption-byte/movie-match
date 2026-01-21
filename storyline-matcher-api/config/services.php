@@ -9,7 +9,11 @@ return [
     ],
 
     'embedding' => [
-        'provider' => env('EMBEDDING_PROVIDER', 'openai'), // 'openai' or 'huggingface'
+        'provider' => env('EMBEDDING_PROVIDER', 'openai'), // 'openai', 'huggingface', or 'local'
+    ],
+
+    'local_embedding' => [
+        'url' => env('LOCAL_EMBEDDING_URL', 'http://localhost:5001'),
     ],
 
     'openai' => [
