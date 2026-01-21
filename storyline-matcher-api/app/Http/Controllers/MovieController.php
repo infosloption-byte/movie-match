@@ -212,6 +212,67 @@ class MovieController extends Controller
     }
 
     /**
+     * Search movies by custom plot/storyline
+     *
+     * POST /api/movies/search-by-plot
+     * Body: { "plot": "A young wizard discovers his powers...", "limit": 10, "threshold": 0.7 }
+     */
+    public function searchByPlot(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'plot' => 'required|string|min:10',
+            'limit' => 'integer|min:1|max:50',
+            'threshold' => 'numeric|min:0|max:1',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $plot = $request->input('plot');
+            $limit = $request->input('limit', 10);
+            $threshold = $request->input('threshold', 0.7);
+
+            // Generate embedding for the user's plot
+            $text = $this->embeddingService->prepareText($plot);
+            $queryEmbedding = $this->embeddingService->generateEmbedding($text);
+
+            // Find similar movies
+            $similarMovies = $this->similarityService->findSimilarMoviesByEmbedding(
+                $queryEmbedding,
+                $limit,
+                $threshold
+            );
+
+            return response()->json([
+                'success' => true,
+                'query' => [
+                    'plot' => substr($plot, 0, 200) . (strlen($plot) > 200 ? '...' : ''),
+                    'limit' => $limit,
+                    'threshold' => $threshold,
+                ],
+                'similar_movies' => $similarMovies,
+                'count' => count($similarMovies),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Plot-based search failed', [
+                'plot_length' => strlen($request->input('plot', '')),
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Plot search failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Get similar movies based on plot embedding
      *
      * GET /api/movies/{id}/similar
