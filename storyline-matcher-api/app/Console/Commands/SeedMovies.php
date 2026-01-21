@@ -154,6 +154,12 @@ class SeedMovies extends Command
                     $this->newLine();
                     $this->error("Failed to generate embedding for: {$movie->title}");
                     $this->error("Error: {$e->getMessage()}");
+
+                    // Show full error details for debugging
+                    if ($this->output->isVerbose()) {
+                        $this->error("Stack trace: " . $e->getTraceAsString());
+                    }
+
                     break; // Exit retry loop
                 }
             }
