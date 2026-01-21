@@ -27,7 +27,7 @@ class EmbeddingService
         if ($this->provider === 'huggingface') {
             $this->apiKey = config('services.huggingface.api_key');
             $this->model = config('services.huggingface.model', 'sentence-transformers/all-MiniLM-L6-v2');
-            $this->apiUrl = "https://api-inference.huggingface.co/pipeline/feature-extraction/{$this->model}";
+            $this->apiUrl = "https://api-inference.huggingface.co/models/{$this->model}";
         } else {
             // Default to OpenAI
             $this->apiKey = config('services.openai.api_key');
