@@ -27,8 +27,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('movie_id')->constrained()->onDelete('cascade');
 
-            // For MySQL, add JSON column directly in the schema
-            if ($driver === 'mysql') {
+            // For MySQL and SQLite, add JSON column directly in the schema
+            if ($driver === 'mysql' || $driver === 'sqlite') {
                 $table->json('embedding')->nullable();
             }
 
