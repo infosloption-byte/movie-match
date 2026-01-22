@@ -92,6 +92,7 @@ class SeedMovies extends Command
         $this->info("🤖 Generating embeddings...");
         $moviesWithoutEmbeddings = Movie::whereDoesntHave('embedding')
             ->whereNotNull('plot_summary')
+            ->where('plot_summary', '!=', '')
             ->get();
 
         if ($moviesWithoutEmbeddings->isEmpty()) {
