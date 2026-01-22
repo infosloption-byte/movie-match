@@ -6,6 +6,7 @@ return [
         'base_url' => env('TMDB_BASE_URL', 'https://api.themoviedb.org/3'),
         'image_base_url' => env('TMDB_IMAGE_BASE_URL', 'https://image.tmdb.org/t/p'),
         'rate_limit_per_second' => 4, // TMDB allows ~40 requests per 10 seconds
+        'storage_mode' => env('TMDB_STORAGE_MODE', 'minimal'), // 'minimal' or 'full'
     ],
 
     'embedding' => [
