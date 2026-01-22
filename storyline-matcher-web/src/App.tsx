@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import SearchBar from './components/SearchBar';
+import PlotSearchInput from './components/PlotSearchInput';
 import MovieGrid from './components/MovieGrid';
 import SimilarMovies from './components/SimilarMovies';
 import Loading from './components/Loading';
@@ -7,15 +8,20 @@ import ErrorMessage from './components/ErrorMessage';
 import { api } from './services/api';
 import type { Movie, SimilarMovie } from './types';
 
+type SearchMode = 'title' | 'plot';
+
 function App() {
+  const [searchMode, setSearchMode] = useState<SearchMode>('title');
   const [searchResults, setSearchResults] = useState<Movie[]>([]);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [similarMovies, setSimilarMovies] = useState<SimilarMovie[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingSimilar, setIsLoadingSimilar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [plotSearchQuery, setPlotSearchQuery] = useState<string>('');
 
-  const handleSearch = async (query: string) => {
+  // Scenario 1: Search by title
+  const handleTitleSearch = async (query: string) => {
     setIsSearching(true);
     setError(null);
     setSelectedMovie(null);
@@ -31,6 +37,29 @@ function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to search movies');
       setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Scenario 2: Search by custom plot
+  const handlePlotSearch = async (plot: string) => {
+    setIsSearching(true);
+    setError(null);
+    setSelectedMovie(null);
+    setSearchResults([]);
+    setPlotSearchQuery(plot);
+
+    try {
+      const response = await api.searchByPlot(plot, 10, 0.6);
+      setSimilarMovies(response.similar_movies);
+
+      if (response.similar_movies.length === 0) {
+        setError('No similar movies found for this plot. Try a different description.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to search by plot');
+      setSimilarMovies([]);
     } finally {
       setIsSearching(false);
     }
@@ -58,6 +87,19 @@ function App() {
     }
   };
 
+  const resetSearch = () => {
+    setSelectedMovie(null);
+    setSimilarMovies([]);
+    setSearchResults([]);
+    setError(null);
+    setPlotSearchQuery('');
+  };
+
+  const handleModeChange = (mode: SearchMode) => {
+    setSearchMode(mode);
+    resetSearch();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Header */}
@@ -73,10 +115,59 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 max-w-6xl">
+        {/* Mode Selector Tabs */}
+        <div className="mb-8">
+          <div className="bg-white rounded-lg shadow-sm p-2 inline-flex gap-2">
+            <button
+              onClick={() => handleModeChange('title')}
+              className={`px-6 py-3 rounded-md font-semibold transition ${
+                searchMode === 'title'
+                  ? 'bg-primary-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              📽️ Scenario 1: Search by Title
+            </button>
+            <button
+              onClick={() => handleModeChange('plot')}
+              className={`px-6 py-3 rounded-md font-semibold transition ${
+                searchMode === 'plot'
+                  ? 'bg-primary-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              ✨ Scenario 2: Search by Plot
+            </button>
+          </div>
+
+          {/* Mode Description */}
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              {searchMode === 'title' ? (
+                <>
+                  <strong>Scenario 1:</strong> Search for a movie by title, view its details, then
+                  discover similar movies based on plot similarity.
+                </>
+              ) : (
+                <>
+                  <strong>Scenario 2:</strong> Describe a custom plot or storyline, and find movies
+                  that match your description using AI-powered semantic search.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
         {/* Search Section */}
         <section className="mb-8">
-          <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+          <div className="bg-white rounded-lg shadow-md p-6">
+            {searchMode === 'title' ? (
+              <SearchBar onSearch={handleTitleSearch} isLoading={isSearching} />
+            ) : (
+              <PlotSearchInput onSearch={handlePlotSearch} isLoading={isSearching} />
+            )}
+          </div>
         </section>
 
         {/* Error Message */}
@@ -92,50 +183,58 @@ function App() {
         )}
 
         {/* Loading State */}
-        {isSearching && <Loading message="Searching for movies..." />}
-
-        {/* Search Results */}
-        {!isSearching && searchResults.length > 0 && !selectedMovie && (
-          <MovieGrid
-            movies={searchResults}
-            onMovieClick={handleMovieClick}
-            title="Search Results"
+        {isSearching && (
+          <Loading
+            message={
+              searchMode === 'title' ? 'Searching for movies...' : 'Finding similar movies...'
+            }
           />
         )}
 
-        {/* Selected Movie & Similar Movies */}
+        {/* Scenario 1: Search Results (Title-based) */}
+        {searchMode === 'title' &&
+          !isSearching &&
+          searchResults.length > 0 &&
+          !selectedMovie && (
+            <MovieGrid
+              movies={searchResults}
+              onMovieClick={handleMovieClick}
+              title="Search Results - Click a movie to see similar ones"
+            />
+          )}
+
+        {/* Selected Movie & Similar Movies (From Scenario 1) */}
         {selectedMovie && (
           <div>
             <button
-              onClick={() => {
-                setSelectedMovie(null);
-                setSimilarMovies([]);
-                setError(null);
-              }}
+              onClick={resetSearch}
               className="mb-6 text-primary-600 hover:text-primary-700 font-semibold flex items-center gap-2"
             >
-              ← Back to search results
+              ← Back to {searchMode === 'title' ? 'search results' : 'plot search'}
             </button>
 
             <div className="mb-8 bg-white rounded-lg shadow-md p-6">
               <h2 className="text-2xl font-bold mb-4">Selected Movie</h2>
-              <div className="flex gap-6">
+              <div className="flex flex-col md:flex-row gap-6">
                 <img
                   src={selectedMovie.poster_url || 'https://via.placeholder.com/200x300'}
                   alt={selectedMovie.title}
-                  className="w-48 h-72 object-cover rounded-lg shadow"
+                  className="w-48 h-72 object-cover rounded-lg shadow mx-auto md:mx-0"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src =
-                      'https://via.placeholder.com/200x300';
+                      'https://via.placeholder.com/200x300?text=No+Poster';
                   }}
                 />
                 <div className="flex-1">
                   <h3 className="text-xl font-bold mb-2">{selectedMovie.title}</h3>
                   {selectedMovie.release_year && (
-                    <p className="text-gray-600 mb-4">Year: {selectedMovie.release_year}</p>
+                    <p className="text-gray-600 mb-4">📅 Year: {selectedMovie.release_year}</p>
                   )}
                   {selectedMovie.plot_summary && (
-                    <p className="text-gray-700">{selectedMovie.plot_summary}</p>
+                    <div>
+                      <h4 className="font-semibold text-gray-800 mb-2">Plot Summary:</h4>
+                      <p className="text-gray-700 leading-relaxed">{selectedMovie.plot_summary}</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -149,19 +248,43 @@ function App() {
           </div>
         )}
 
+        {/* Scenario 2: Plot-based Search Results */}
+        {searchMode === 'plot' &&
+          !isSearching &&
+          !selectedMovie &&
+          similarMovies.length > 0 && (
+            <div>
+              {plotSearchQuery && (
+                <div className="mb-6 bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-lg font-semibold mb-2">Your Plot Description:</h3>
+                  <p className="text-gray-700 italic">"{plotSearchQuery}"</p>
+                </div>
+              )}
+              <SimilarMovies
+                movies={similarMovies}
+                onMovieClick={handleMovieClick}
+                title="Movies Matching Your Plot"
+              />
+            </div>
+          )}
+
         {/* Empty State */}
         {!isSearching &&
           searchResults.length === 0 &&
+          similarMovies.length === 0 &&
           !selectedMovie &&
           !error && (
             <div className="text-center py-20">
-              <div className="text-6xl mb-4">🎥</div>
+              <div className="text-6xl mb-4">
+                {searchMode === 'title' ? '🎥' : '✨'}
+              </div>
               <h2 className="text-2xl font-semibold text-gray-700 mb-2">
-                Discover Similar Movies
+                {searchMode === 'title' ? 'Ready to Discover' : 'Describe Your Perfect Movie'}
               </h2>
               <p className="text-gray-600 max-w-md mx-auto">
-                Search for a movie by title to find other movies with similar storylines
-                based on AI-powered semantic analysis.
+                {searchMode === 'title'
+                  ? 'Search for a movie by title to find similar movies based on AI-powered plot analysis.'
+                  : 'Enter a plot description and let AI find movies that match your storyline.'}
               </p>
             </div>
           )}
@@ -170,8 +293,8 @@ function App() {
       {/* Footer */}
       <footer className="bg-white border-t mt-16">
         <div className="container mx-auto px-4 py-6 text-center text-gray-600">
-          <p>
-            Powered by OpenAI Embeddings, TMDB API, and pgvector
+          <p className="text-sm">
+            Powered by Local Embeddings, TMDB API, and Sentence Transformers
           </p>
         </div>
       </footer>
