@@ -33,10 +33,18 @@ class TMDBService
      *
      * @param string $query Search query
      * @param int $page Page number (default: 1)
+     * @param bool $useCache Whether to use cached data (default: true)
      * @return array TMDB API response
      */
-    public function searchMovies(string $query, int $page = 1): array
+    public function searchMovies(string $query, int $page = 1, bool $useCache = true): array
     {
+        $cacheKey = "tmdb_search_" . md5($query . "_page_{$page}");
+
+        // Try to get from cache first if enabled
+        if ($useCache && Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
         $this->waitForRateLimit();
 
         $request = Http::withOptions(['verify' => config('app.env') !== 'local'])
@@ -56,17 +64,30 @@ class TMDBService
             throw new \Exception('Failed to search movies from TMDB');
         }
 
-        return $request->json();
+        $data = $request->json();
+
+        // Cache search results for 1 hour
+        Cache::put($cacheKey, $data, now()->addHours(1));
+
+        return $data;
     }
 
     /**
      * Get detailed movie information by TMDB ID
      *
      * @param int $tmdbId TMDB movie ID
+     * @param bool $useCache Whether to use cached data (default: true)
      * @return array Movie details
      */
-    public function getMovieDetails(int $tmdbId): array
+    public function getMovieDetails(int $tmdbId, bool $useCache = true): array
     {
+        $cacheKey = "tmdb_movie_{$tmdbId}";
+
+        // Try to get from cache first if enabled
+        if ($useCache && Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
         $this->waitForRateLimit();
 
         $response = Http::withOptions(['verify' => config('app.env') !== 'local'])
@@ -84,7 +105,12 @@ class TMDBService
             throw new \Exception("Failed to get movie details from TMDB for ID: {$tmdbId}");
         }
 
-        return $response->json();
+        $data = $response->json();
+
+        // Cache for 24 hours (movie data rarely changes)
+        Cache::put($cacheKey, $data, now()->addHours(24));
+
+        return $data;
     }
 
     /**
@@ -206,19 +232,55 @@ class TMDBService
      * Transform TMDB movie data to our database format
      *
      * @param array $tmdbMovie Raw movie data from TMDB API
+     * @param string $mode Storage mode: 'minimal' (only essentials) or 'full' (all data)
      * @return array Formatted movie data for database insertion
      */
-    public function transformMovieData(array $tmdbMovie): array
+    public function transformMovieData(array $tmdbMovie, string $mode = 'minimal'): array
     {
-        return [
+        $data = [
             'tmdb_id' => $tmdbMovie['id'],
             'title' => $tmdbMovie['title'] ?? $tmdbMovie['original_title'] ?? 'Unknown',
             'plot_summary' => $tmdbMovie['overview'] ?? null,
-            'release_year' => isset($tmdbMovie['release_date'])
+        ];
+
+        // In full mode, store additional data locally
+        if ($mode === 'full') {
+            $data['release_year'] = isset($tmdbMovie['release_date'])
                 ? (int) substr($tmdbMovie['release_date'], 0, 4)
+                : null;
+            $data['poster_url'] = $this->buildPosterUrl($tmdbMovie['poster_path'] ?? null);
+            $data['popularity'] = $tmdbMovie['popularity'] ?? 0;
+        }
+
+        return $data;
+    }
+
+    /**
+     * Enrich movie data with TMDB details on-demand
+     *
+     * Fetches and returns full movie details from TMDB API.
+     * Used in minimal storage mode to get data that's not stored locally.
+     *
+     * @param int $tmdbId TMDB movie ID
+     * @param bool $useCache Whether to use cached data
+     * @return array Enriched movie data
+     */
+    public function enrichMovieData(int $tmdbId, bool $useCache = true): array
+    {
+        $details = $this->getMovieDetails($tmdbId, $useCache);
+
+        return [
+            'release_year' => isset($details['release_date'])
+                ? (int) substr($details['release_date'], 0, 4)
                 : null,
-            'poster_url' => $this->buildPosterUrl($tmdbMovie['poster_path'] ?? null),
-            'popularity' => $tmdbMovie['popularity'] ?? 0,
+            'poster_url' => $this->buildPosterUrl($details['poster_path'] ?? null),
+            'backdrop_url' => $this->buildPosterUrl($details['backdrop_path'] ?? null, 'w780'),
+            'popularity' => $details['popularity'] ?? 0,
+            'vote_average' => $details['vote_average'] ?? 0,
+            'vote_count' => $details['vote_count'] ?? 0,
+            'runtime' => $details['runtime'] ?? null,
+            'genres' => $details['genres'] ?? [],
+            'production_companies' => $details['production_companies'] ?? [],
         ];
     }
 }

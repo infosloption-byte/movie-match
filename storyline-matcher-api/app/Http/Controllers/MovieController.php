@@ -56,6 +56,8 @@ class MovieController extends Controller
             $imported = 0;
             $skipped = 0;
 
+            $storageMode = config('services.tmdb.storage_mode', 'minimal');
+
             foreach ($tmdbResponse['results'] ?? [] as $tmdbMovie) {
                 // Skip movies without plot summaries
                 if (empty($tmdbMovie['overview'])) {
@@ -63,7 +65,7 @@ class MovieController extends Controller
                     continue;
                 }
 
-                $movieData = $this->tmdbService->transformMovieData($tmdbMovie);
+                $movieData = $this->tmdbService->transformMovieData($tmdbMovie, $storageMode);
 
                 // Create or update movie
                 Movie::updateOrCreate(
@@ -357,20 +359,45 @@ class MovieController extends Controller
         try {
             $movie = Movie::with('embedding')->findOrFail($id);
 
+            $movieData = [
+                'id' => $movie->id,
+                'tmdb_id' => $movie->tmdb_id,
+                'title' => $movie->title,
+                'plot_summary' => $movie->plot_summary,
+                'has_embedding' => $movie->hasEmbedding(),
+                'created_at' => $movie->created_at,
+                'updated_at' => $movie->updated_at,
+            ];
+
+            // Check if we're in minimal storage mode
+            $storageMode = config('services.tmdb.storage_mode', 'minimal');
+
+            if ($storageMode === 'minimal') {
+                // Fetch additional data from TMDB on-demand
+                try {
+                    $enrichedData = $this->tmdbService->enrichMovieData($movie->tmdb_id);
+                    $movieData = array_merge($movieData, $enrichedData);
+                    $movieData['data_source'] = 'tmdb_api';
+                } catch (\Exception $e) {
+                    Log::warning('Failed to enrich movie data from TMDB', [
+                        'movie_id' => $movie->id,
+                        'tmdb_id' => $movie->tmdb_id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    // Continue with local data only
+                    $movieData['data_source'] = 'local_only';
+                }
+            } else {
+                // Full mode - use locally stored data
+                $movieData['release_year'] = $movie->release_year;
+                $movieData['poster_url'] = $movie->poster_url;
+                $movieData['popularity'] = $movie->popularity;
+                $movieData['data_source'] = 'local_storage';
+            }
+
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'id' => $movie->id,
-                    'tmdb_id' => $movie->tmdb_id,
-                    'title' => $movie->title,
-                    'plot_summary' => $movie->plot_summary,
-                    'release_year' => $movie->release_year,
-                    'poster_url' => $movie->poster_url,
-                    'popularity' => $movie->popularity,
-                    'has_embedding' => $movie->hasEmbedding(),
-                    'created_at' => $movie->created_at,
-                    'updated_at' => $movie->updated_at,
-                ],
+                'data' => $movieData,
             ]);
 
         } catch (\Exception $e) {
