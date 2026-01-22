@@ -302,6 +302,131 @@ class SimilarityService
     }
 
     /**
+     * Find similar movies based on a custom embedding vector
+     *
+     * This method is used for plot-based search where we have a query embedding
+     * (from user's custom storyline) instead of an existing movie ID.
+     *
+     * @param array $queryEmbedding The embedding vector to compare against
+     * @param int|null $limit Maximum number of similar movies to return
+     * @param float|null $threshold Minimum similarity score threshold
+     * @return array Array of similar movies with scores
+     */
+    public function findSimilarMoviesByEmbedding(
+        array $queryEmbedding,
+        ?int $limit = null,
+        ?float $threshold = null
+    ): array {
+        $limit = $limit ?? $this->similarMoviesLimit;
+        $threshold = $threshold ?? $this->similarityThreshold;
+
+        // Check database driver and use appropriate method
+        $driver = DB::getDriverName();
+
+        if ($driver === 'pgsql') {
+            return $this->findSimilarMoviesByEmbeddingPostgreSQL($queryEmbedding, $limit, $threshold);
+        } else {
+            return $this->findSimilarMoviesByEmbeddingMySQL($queryEmbedding, $limit, $threshold);
+        }
+    }
+
+    /**
+     * Find similar movies using PostgreSQL pgvector for custom embedding
+     */
+    private function findSimilarMoviesByEmbeddingPostgreSQL(array $queryEmbedding, int $limit, float $threshold): array
+    {
+        // Format embedding for PostgreSQL pgvector
+        $embeddingString = '[' . implode(',', $queryEmbedding) . ']';
+
+        $results = DB::select("
+            SELECT
+                m.id,
+                m.tmdb_id,
+                m.title,
+                m.plot_summary,
+                m.release_year,
+                m.poster_url,
+                m.popularity,
+                1 - (me.embedding <=> ?) as similarity_score
+            FROM movies m
+            INNER JOIN movie_embeddings me ON me.movie_id = m.id
+            WHERE me.embedding IS NOT NULL
+                AND 1 - (me.embedding <=> ?) >= ?
+            ORDER BY me.embedding <=> ?
+            LIMIT ?
+        ", [
+            $embeddingString,  // Query vector
+            $embeddingString,  // Query vector for threshold check
+            $threshold,        // Similarity threshold
+            $embeddingString,  // Query vector for ordering
+            $limit,           // Result limit
+        ]);
+
+        return array_map(function ($row) {
+            return [
+                'id' => $row->id,
+                'tmdb_id' => $row->tmdb_id,
+                'title' => $row->title,
+                'plot_summary' => $row->plot_summary,
+                'release_year' => $row->release_year,
+                'poster_url' => $row->poster_url,
+                'popularity' => (float) $row->popularity,
+                'similarity_score' => round((float) $row->similarity_score, 4),
+            ];
+        }, $results);
+    }
+
+    /**
+     * Find similar movies using MySQL for custom embedding
+     */
+    private function findSimilarMoviesByEmbeddingMySQL(array $queryEmbedding, int $limit, float $threshold): array
+    {
+        // Load all movies with embeddings
+        $candidates = Movie::whereHas('embedding')
+            ->with('embedding')
+            ->get();
+
+        $similarities = [];
+
+        foreach ($candidates as $candidate) {
+            if (!$candidate->embedding || !$candidate->embedding->embedding) {
+                continue;
+            }
+
+            // Decode JSON embedding
+            $candidateEmbedding = json_decode($candidate->embedding->embedding, true);
+
+            if (!$candidateEmbedding || !is_array($candidateEmbedding)) {
+                continue;
+            }
+
+            // Calculate cosine similarity
+            $similarity = $this->calculateCosineSimilarity($queryEmbedding, $candidateEmbedding);
+
+            // Only include if above threshold
+            if ($similarity >= $threshold) {
+                $similarities[] = [
+                    'id' => $candidate->id,
+                    'tmdb_id' => $candidate->tmdb_id,
+                    'title' => $candidate->title,
+                    'plot_summary' => $candidate->plot_summary,
+                    'release_year' => $candidate->release_year,
+                    'poster_url' => $candidate->poster_url,
+                    'popularity' => (float) $candidate->popularity,
+                    'similarity_score' => round($similarity, 4),
+                ];
+            }
+        }
+
+        // Sort by similarity score (descending) and limit results
+        usort($similarities, function ($a, $b) {
+            return $b['similarity_score'] <=> $a['similarity_score'];
+        });
+
+        return array_slice($similarities, 0, $limit);
+    }
+
+    /**
      * Batch calculate and cache similarities for a movie
      *
      * Useful for pre-computing similarities for popular movies.

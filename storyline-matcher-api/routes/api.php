@@ -19,6 +19,9 @@ Route::prefix('movies')->group(function () {
     // Search movies by title
     Route::get('/search', [MovieController::class, 'search']);
 
+    // Search movies by custom plot/storyline
+    Route::post('/search-by-plot', [MovieController::class, 'searchByPlot']);
+
     // Batch generate embeddings
     Route::post('/batch-generate-embeddings', [MovieController::class, 'batchGenerateEmbeddings']);
 
