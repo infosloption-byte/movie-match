@@ -13,7 +13,10 @@ class SeedMovies extends Command
     /**
      * The name and signature of the console command.
      */
-    protected $signature = 'movies:seed {--pages=3 : Number of pages to import}';
+    protected $signature = 'movies:seed
+                            {--pages=3 : Number of pages to import}
+                            {--skip-embeddings : Skip embedding generation (import only)}
+                            {--fast : Use faster speeds (reduce delays)}';
 
     /**
      * The console command description.
@@ -33,9 +36,21 @@ class SeedMovies extends Command
     public function handle()
     {
         $pages = (int) $this->option('pages');
+        $skipEmbeddings = $this->option('skip-embeddings');
+        $fastMode = $this->option('fast');
+
+        // Set delays based on mode
+        $importDelay = $fastMode ? 0.25 : 1; // 0.25s vs 1s between TMDB requests
+        $embeddingDelay = $fastMode ? 0.5 : 2; // 0.5s vs 2s between embeddings
 
         $this->info("🎬 Starting movie import...");
         $this->info("This will import {$pages} pages of popular movies from TMDB");
+        if ($fastMode) {
+            $this->warn("⚡ Fast mode enabled - using reduced delays");
+        }
+        if ($skipEmbeddings) {
+            $this->warn("⏭️  Skipping embedding generation - import only");
+        }
         $this->newLine();
 
         $totalImported = 0;
@@ -76,7 +91,7 @@ class SeedMovies extends Command
                 }
 
                 // Small delay to avoid rate limiting
-                sleep(1);
+                usleep((int)($importDelay * 1000000)); // Convert to microseconds
 
             } catch (\Exception $e) {
                 $this->error("  ❌ Error importing page {$page}: {$e->getMessage()}");
@@ -87,6 +102,13 @@ class SeedMovies extends Command
         $this->newLine();
         $this->info("✅ Imported {$totalImported} new movies!");
         $this->newLine();
+
+        // Skip embeddings if requested
+        if ($skipEmbeddings) {
+            $this->info("⏭️  Skipping embedding generation as requested.");
+            $this->info("💡 Run 'php artisan embeddings:generate' later to generate embeddings.");
+            return 0;
+        }
 
         // Generate embeddings
         $this->info("🤖 Generating embeddings...");
@@ -133,8 +155,8 @@ class SeedMovies extends Command
                     $successCount++;
                     $bar->advance();
 
-                    // Delay to avoid rate limits (increase for free tier)
-                    sleep(2); // 2 seconds between successful requests
+                    // Delay to avoid rate limits
+                    usleep((int)($embeddingDelay * 1000000)); // Convert to microseconds
                     break; // Success, exit retry loop
 
                 } catch (\Exception $e) {
