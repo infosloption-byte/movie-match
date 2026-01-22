@@ -4,9 +4,10 @@ import MovieCard from './MovieCard';
 interface SimilarMoviesProps {
   movies: SimilarMovie[];
   onMovieClick?: (movie: SimilarMovie) => void;
+  title?: string;
 }
 
-export default function SimilarMovies({ movies, onMovieClick }: SimilarMoviesProps) {
+export default function SimilarMovies({ movies, onMovieClick, title }: SimilarMoviesProps) {
   if (movies.length === 0) {
     return (
       <div className="text-center py-12">
@@ -20,7 +21,7 @@ export default function SimilarMovies({ movies, onMovieClick }: SimilarMoviesPro
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6 text-gray-800">
-        Similar Movies by Storyline
+        {title || 'Similar Movies by Storyline'}
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
         {movies.map((movie) => (

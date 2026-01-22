@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import type { ApiResponse, Movie, SearchResponse, SimilarMoviesResponse } from '../types';
+import type { ApiResponse, Movie, SearchResponse, SimilarMoviesResponse, SimilarMovie } from '../types';
 
 class ApiService {
   private client: AxiosInstance;
@@ -103,6 +103,31 @@ class ApiService {
     }
 
     return response.data.data;
+  }
+
+  /**
+   * Search movies by custom plot/storyline (Scenario 2)
+   */
+  async searchByPlot(
+    plot: string,
+    limit = 10,
+    threshold = 0.6
+  ): Promise<{ similar_movies: SimilarMovie[]; count: number; query: any }> {
+    const response = await this.client.post<ApiResponse<any>>('/movies/search-by-plot', {
+      plot,
+      limit,
+      threshold,
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to search by plot');
+    }
+
+    return {
+      similar_movies: response.data.similar_movies || [],
+      count: response.data.count || 0,
+      query: response.data.query || {},
+    };
   }
 }
 
