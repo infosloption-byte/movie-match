@@ -12,6 +12,21 @@ class ApiService {
         'Accept': 'application/json',
       },
     });
+
+    // Add response interceptor to extract error messages from failed responses
+    this.client.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        // Extract error message from response if available
+        if (error.response?.data?.message) {
+          // Create a new error with the server's message
+          const serverError = new Error(error.response.data.message);
+          (serverError as any).response = error.response;
+          throw serverError;
+        }
+        throw error;
+      }
+    );
   }
 
   /**
