@@ -3,6 +3,7 @@
 This guide will help you get the Storyline Matcher up and running in under 10 minutes.
 
 ## Prerequisites Checklist
+## Prerequisites Checklist
 
 Before starting, make sure you have:
 
